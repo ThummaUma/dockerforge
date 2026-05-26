@@ -94,6 +94,51 @@ def run_docker_build(repo_path, dockerfile_content):
         return 1, "", str(e)
 
 
+def run_docker_container():
+    try:
+        result = subprocess.run(
+            'docker run --rm -d --name dockerforge_test dockerforge-test',
+            capture_output=True,
+            text=True,
+            timeout=30,
+            shell=True,
+            encoding="utf-8",
+            errors="ignore"
+        )
+
+        if result.returncode == 0:
+            container_id = result.stdout.strip()
+            time.sleep(3)
+
+            check = subprocess.run(
+                f'docker ps --filter id={container_id} --format "{{{{.ID}}}}"',
+                capture_output=True,
+                text=True,
+                shell=True,
+                encoding="utf-8",
+                errors="ignore"
+            )
+
+            subprocess.run(
+                'docker stop dockerforge_test',
+                capture_output=True,
+                shell=True
+            )
+
+            if check.stdout.strip():
+                return True, "Container started and ran successfully! ✅"
+            else:
+                return False, "Container started but stopped immediately"
+        else:
+            return False, f"Container failed to start: {result.stderr[:200]}"
+
+    except subprocess.TimeoutExpired:
+        subprocess.run('docker stop dockerforge_test', shell=True)
+        return False, "Container timed out - may need environment variables"
+    except Exception as e:
+        return False, f"Container run error: {str(e)}"
+
+
 @app.post("/generate")
 async def generate(request: RepoRequest):
     logs = []
@@ -132,6 +177,11 @@ async def generate(request: RepoRequest):
                     if fixed:
                         final_dockerfile = fixed
                     logs.append("AI provided a fix, retrying...")
+
+        if build_success:
+            logs.append("Running container to verify it starts...")
+            run_success, run_log = run_docker_container()
+            logs.append(run_log)
 
         return {
             "success": build_success,
