@@ -1,0 +1,6 @@
+backend/.env
+backend/.env.txt
+.env
+*.env
+__pycache__/
+node_modules/
